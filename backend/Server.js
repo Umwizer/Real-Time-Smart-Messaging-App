@@ -7,7 +7,7 @@ import mongoose from "mongoose";
 import helmet from "helmet";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
-// import authRoutes from "./routes/auth.js";
+import authRoutes from "./routes/auth.routes.js"
 
 dotenv.config();
 
@@ -40,7 +40,7 @@ app.use(
   }),
 );
 
-// app.use("/api/auth", authRoutes);
+app.use("/api/auth", authRoutes);
 
 app.get("/", (req, res) => {
   res.json({
