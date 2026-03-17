@@ -9,7 +9,7 @@ const options = {
       description: "Real-Time Smart Messaging Application API",
       contact: {
         name: "Developer",
-        email: "your@email.com"
+        email: "ruthumwizerwa@gmail.com"
       }
     },
     servers: [
