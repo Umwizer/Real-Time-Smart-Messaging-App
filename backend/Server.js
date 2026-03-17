@@ -8,10 +8,12 @@ import helmet from "helmet";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import jwt from "jsonwebtoken";
-import tls from 'tls'; // Changed from crypto to tls
+import tls from 'tls';
 import authRoutes from "./routes/auth.routes.js";
 import chatRoutes from "./routes/chat.routes.js";
 import messageRoutes from "./routes/message.routes.js";
+import swaggerUi from "swagger-ui-express";
+import swaggerSpec from "./swagger.js";
 
 dotenv.config();
 
@@ -49,6 +51,9 @@ app.use(
   })
 );
 
+// SWAGGER DOCUMENTATION - Add this before your routes
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
 // ROUTES
 app.use("/api/auth", authRoutes);
 app.use("/api/chats", chatRoutes);
@@ -64,7 +69,8 @@ app.get("/", (req, res) => {
       auth: "/api/auth",
       chats: "/api/chats",
       messages: "/api/messages",
-      health: "/health"
+      health: "/health",
+      docs: "/api-docs"  // Added Swagger docs link
     }
   });
 });
@@ -179,71 +185,66 @@ io.on("connection", (socket) => {
   });
 });
 
-// DATABASE CONNECTION - SIMPLIFIED FIX
+// DATABASE CONNECTION
 mongoose
   .connect(process.env.MONGODB_URI, {
     serverSelectionTimeoutMS: 5000,
     socketTimeoutMS: 45000,
-    // Use these tls options instead of secureContext
     tls: true,
     tlsAllowInvalidCertificates: true,
     tlsAllowInvalidHostnames: true,
   })
   .then(() => {
-    console.log("MongoDB connected successfully");
+    console.log(" MongoDB connected successfully");
 
     const PORT = process.env.PORT || 5000;
     server.listen(PORT, () => {
-      console.log(`\nServer running on port ${PORT}`);
-      console.log(`HTTP: http://localhost:${PORT}`);
-      console.log(`WebSocket: ws://localhost:${PORT}`);
-      console.log(`\nAvailable Endpoints:`);
-      console.log(`   POST   /api/auth/register`);
-      console.log(`   POST   /api/auth/login`);
-      console.log(`   GET    /api/auth/profile`);
-      console.log(`   PUT    /api/auth/profile`);
-      console.log(`   POST   /api/chats`);
-      console.log(`   GET    /api/chats`);
-      console.log(`   GET    /api/chats/:id`);
-      console.log(`   POST   /api/messages/:chatId`);
-      console.log(`   GET    /api/messages/:chatId`);
-      console.log(`   PUT    /api/messages/:id/status`);
-      console.log(`   DELETE /api/messages/:id`);
+      console.log(`\n  Server running on port ${PORT}`);
+      console.log(` HTTP: http://localhost:${PORT}`);
+      console.log(` WebSocket: ws://localhost:${PORT}`);
+      console.log(`Swagger Docs: http://localhost:${PORT}/api-docs`);
+      console.log(`\n Available Endpoints:`);
+      console.log(`  Auth:     /api/auth/*`);
+      console.log(` Chats:    /api/chats/*`);
+      console.log(` Messages: /api/messages/*`);
+      console.log(` Health:   /health`);
+      console.log(` Docs:     /api-docs`);
     });
   })
   .catch((err) => {
-    console.error("MongoDB connection error:", err.message);
-    console.log("\nTroubleshooting:");
+    console.error(" MongoDB connection error:", err.message);
+    console.log("\n Troubleshooting:");
     console.log("1. Check if MongoDB URI is correct in .env");
     console.log("2. Make sure network allows MongoDB connection");
     console.log("3. Verify credentials if using MongoDB Atlas");
     console.log("4. Current URI:", process.env.MONGODB_URI);
     process.exit(1);
   });
+
 // GRACEFUL SHUTDOWN
 process.on("SIGINT", async () => {
-  console.log("\nReceived SIGINT. Shutting down gracefully...");
-  io.close(() => console.log("Socket.IO closed"));
+  console.log("\n👋 Received SIGINT. Shutting down gracefully...");
+  io.close(() => console.log("📡 Socket.IO closed"));
   await mongoose.connection.close();
-  console.log("MongoDB connection closed");
+  console.log(" MongoDB connection closed");
   process.exit(0);
 });
 
 process.on("SIGTERM", async () => {
-  console.log("\nReceived SIGTERM. Shutting down gracefully...");
+  console.log("\n Received SIGTERM. Shutting down gracefully...");
   io.close();
   await mongoose.connection.close();
   process.exit(0);
 });
 
 // STARTUP LOGS
-console.log("\n" + "=".repeat(50));
+console.log("\n" + "=".repeat(60));
 console.log("AdaptiveChat Backend");
-console.log("=".repeat(50));
+console.log("=".repeat(60));
 console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
 console.log(`CORS Origin: ${process.env.CORS_ORIGIN || "http://localhost:3000"}`);
-console.log(`JWT Secret: ${process.env.JWT_SECRET ? "Set" : "Not set"}`);
+console.log(`JWT Secret: ${process.env.JWT_SECRET ? "Set" : " Not set"}`);
 console.log(`MongoDB URI: ${process.env.MONGODB_URI ? "Configured" : "Not configured"}`);
-console.log("=".repeat(50) + "\n");
+console.log("=".repeat(60) + "\n");
 
 export { app, server, io };
