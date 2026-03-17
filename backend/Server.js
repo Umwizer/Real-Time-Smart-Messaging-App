@@ -8,6 +8,7 @@ import helmet from "helmet";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import jwt from "jsonwebtoken";
+import tls from 'tls'; // Changed from crypto to tls
 import authRoutes from "./routes/auth.routes.js";
 import chatRoutes from "./routes/chat.routes.js";
 import messageRoutes from "./routes/message.routes.js";
@@ -36,7 +37,7 @@ app.use(
   })
 );
 app.use(helmet());
-app.use(morgan("dev")); 
+app.use(morgan("dev"));
 app.use(
   rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -47,6 +48,7 @@ app.use(
     }
   })
 );
+
 // ROUTES
 app.use("/api/auth", authRoutes);
 app.use("/api/chats", chatRoutes);
@@ -76,8 +78,8 @@ app.get("/health", (req, res) => {
     database: mongoose.connection.readyState === 1 ? "connected" : "disconnected"
   });
 });
-// SOCKET.IO HANDLERS (Real-time messaging)
 
+// SOCKET.IO HANDLERS
 io.use(async (socket, next) => {
   try {
     const token = socket.handshake.auth.token;
@@ -104,7 +106,6 @@ io.on("connection", (socket) => {
     socket.join(`chat_${chatId}`);
     console.log(`User ${socket.userId} joined chat ${chatId}`);
     
-    // Notify others in chat
     socket.to(`chat_${chatId}`).emit("user_joined", {
       userId: socket.userId,
       chatId,
@@ -128,7 +129,6 @@ io.on("connection", (socket) => {
   socket.on("send_message", (data) => {
     const { chatId, message } = data;
     
-    // Broadcast to all in chat except sender
     socket.to(`chat_${chatId}`).emit("new_message", {
       ...message,
       deliveredAt: new Date().toISOString()
@@ -167,7 +167,6 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     console.log(`Client disconnected: ${socket.id} (User: ${socket.userId})`);
     
-    // Update user status to offline
     socket.broadcast.emit("user_offline", {
       userId: socket.userId,
       timestamp: new Date().toISOString()
@@ -176,25 +175,29 @@ io.on("connection", (socket) => {
 
   // Handle errors
   socket.on("error", (error) => {
-    console.error(` Socket error for user ${socket.userId}:`, error);
+    console.error(`Socket error for user ${socket.userId}:`, error);
   });
 });
-// DATABASE CONNECTION
+
+// DATABASE CONNECTION - SIMPLIFIED FIX
 mongoose
   .connect(process.env.MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000,
+    // Use these tls options instead of secureContext
+    tls: true,
+    tlsAllowInvalidCertificates: true,
+    tlsAllowInvalidHostnames: true,
   })
   .then(() => {
     console.log("MongoDB connected successfully");
 
     const PORT = process.env.PORT || 5000;
     server.listen(PORT, () => {
-      console.log(`\n Server running on port ${PORT}`);
-      console.log(`HTTP:  http://localhost:${PORT}`);
+      console.log(`\nServer running on port ${PORT}`);
+      console.log(`HTTP: http://localhost:${PORT}`);
       console.log(`WebSocket: ws://localhost:${PORT}`);
-      console.log(`API Docs: http://localhost:${PORT}/`);
-      console.log(`\n Available Endpoints:`);
+      console.log(`\nAvailable Endpoints:`);
       console.log(`   POST   /api/auth/register`);
       console.log(`   POST   /api/auth/login`);
       console.log(`   GET    /api/auth/profile`);
@@ -209,47 +212,38 @@ mongoose
     });
   })
   .catch((err) => {
-    console.error(" MongoDB connection error:", err.message);
-    console.log("\n Troubleshooting:");
+    console.error("MongoDB connection error:", err.message);
+    console.log("\nTroubleshooting:");
     console.log("1. Check if MongoDB URI is correct in .env");
     console.log("2. Make sure network allows MongoDB connection");
     console.log("3. Verify credentials if using MongoDB Atlas");
+    console.log("4. Current URI:", process.env.MONGODB_URI);
     process.exit(1);
   });
-
-// ======================
 // GRACEFUL SHUTDOWN
-// ======================
 process.on("SIGINT", async () => {
-  console.log("\n Received SIGINT. Shutting down gracefully...");
-  
-  // Close Socket.IO connections
-  io.close(() => {
-    console.log(" Socket.IO closed");
-  });
-  
-  // Close MongoDB connection
+  console.log("\nReceived SIGINT. Shutting down gracefully...");
+  io.close(() => console.log("Socket.IO closed"));
   await mongoose.connection.close();
-  console.log(" MongoDB connection closed");
-  
-  // Exit
+  console.log("MongoDB connection closed");
   process.exit(0);
 });
 
 process.on("SIGTERM", async () => {
-  console.log("\n Received SIGTERM. Shutting down gracefully...");
+  console.log("\nReceived SIGTERM. Shutting down gracefully...");
   io.close();
   await mongoose.connection.close();
   process.exit(0);
 });
 
+// STARTUP LOGS
 console.log("\n" + "=".repeat(50));
 console.log("AdaptiveChat Backend");
 console.log("=".repeat(50));
 console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
-console.log(` CORS Origin: ${process.env.CORS_ORIGIN || "http://localhost:3000"}`);
-console.log(`JWT Secret: ${process.env.JWT_SECRET ? " Set" : " Not set"}`);
-console.log(` MongoDB URI: ${process.env.MONGODB_URI ? " Configured" : " Not configured"}`);
+console.log(`CORS Origin: ${process.env.CORS_ORIGIN || "http://localhost:3000"}`);
+console.log(`JWT Secret: ${process.env.JWT_SECRET ? "Set" : "Not set"}`);
+console.log(`MongoDB URI: ${process.env.MONGODB_URI ? "Configured" : "Not configured"}`);
 console.log("=".repeat(50) + "\n");
 
 export { app, server, io };

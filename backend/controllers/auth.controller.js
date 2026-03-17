@@ -15,37 +15,31 @@ const generateToken = (id, role) => {
 export const register = async (req, res) => {
   try {
     const { username, email, password } = req.body;
-
+    
     // Check if user exists
     const userExists = await User.findOne({ $or: [{ email }, { username }] });
     if (userExists) {
       return res.status(400).json({
         status: "error",
-        message: "User already exists with this email or username"
+        message: "User already exists"
       });
     }
-
+    
     // Create user
-    const user = await User.create({
-      username,
-      email,
-      password,
-    });
-
+    const user = await User.create({ username, email, password });
+    
     // Generate token
     const token = generateToken(user._id, user.role);
-
-    // Send response
+    
     res.status(201).json({
       status: "success",
-      message: "User registered successfully",
+      message: "Registered successfully",
       data: {
         user: {
           id: user._id,
           username: user.username,
           email: user.email,
-          role: user.role,
-          profilePicture: user.profilePicture
+          role: user.role
         },
         token
       }
@@ -62,36 +56,25 @@ export const register = async (req, res) => {
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
-
-    // Check if user exists
+    
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(401).json({
         status: "error",
-        message: "Invalid email or password"
+        message: "Invalid credentials"
       });
     }
-
-    // Check if user is active
-    if (!user.isActive) {
-      return res.status(401).json({
-        status: "error",
-        message: "Account is deactivated"
-      });
-    }
-
-    // Check password
+    
     const isPasswordValid = await user.comparePassword(password);
     if (!isPasswordValid) {
       return res.status(401).json({
         status: "error",
-        message: "Invalid email or password"
+        message: "Invalid credentials"
       });
     }
-
-    // Generate token
+    
     const token = generateToken(user._id, user.role);
-
+    
     res.status(200).json({
       status: "success",
       message: "Login successful",
@@ -100,8 +83,7 @@ export const login = async (req, res) => {
           id: user._id,
           username: user.username,
           email: user.email,
-          role: user.role,
-          profilePicture: user.profilePicture
+          role: user.role
         },
         token
       }
@@ -116,32 +98,17 @@ export const login = async (req, res) => {
 
 // Logout User
 export const logout = async (req, res) => {
-  try {
-    // In a real app, you might blacklist the token
-    res.status(200).json({
-      status: "success",
-      message: "Logged out successfully"
-    });
-  } catch (error) {
-    res.status(400).json({
-      status: "error",
-      message: error.message
-    });
-  }
+  res.status(200).json({
+    status: "success",
+    message: "Logged out"
+  });
 };
 
-// Get Current User Profile
+// Get Profile
 export const getProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select("-password");
     
-    if (!user) {
-      return res.status(404).json({
-        status: "error",
-        message: "User not found"
-      });
-    }
-
     res.status(200).json({
       status: "success",
       data: { user }
@@ -154,23 +121,20 @@ export const getProfile = async (req, res) => {
   }
 };
 
-// Update User Profile
+// Update Profile
 export const updateProfile = async (req, res) => {
   try {
     const { username, email, profilePicture } = req.body;
     
-    // Don't allow password update here
-    const updateData = { username, email, profilePicture };
-    
     const user = await User.findByIdAndUpdate(
       req.user.id,
-      updateData,
-      { new: true, runValidators: true }
+      { username, email, profilePicture },
+      { new: true }
     ).select("-password");
-
+    
     res.status(200).json({
       status: "success",
-      message: "Profile updated successfully",
+      message: "Profile updated",
       data: { user }
     });
   } catch (error) {
