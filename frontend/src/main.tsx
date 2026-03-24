@@ -1,17 +1,18 @@
-// import React from 'react'
-// import ReactDOM from 'react-dom/client'
+import React from 'react'
+import ReactDOM from 'react-dom/client'
 
-// function App() {
-//   return (
-//     <div style={{ padding: '20px', textAlign: 'center' }}>
-//       <h1>✅ React is working!</h1>
-//       <p>If you see this, JSX is configured correctly.</p>
-//     </div>
-//   )
-// }
+// eslint-disable-next-line react-refresh/only-export-components
+function App() {
+  return (
+    <div style={{ padding: '20px', textAlign: 'center' }}>
+      <h1>React is working!</h1>
+      <p>If you see this, JSX is configured correctly.</p>
+    </div>
+  )
+}
 
-// // ReactDOM.createRoot(document.getElementById('root')!).render(
-//   <React.StrictMode>
-//     <App />
-//   </React.StrictMode>
-// )
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+)
