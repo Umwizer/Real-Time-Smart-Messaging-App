@@ -1,18 +1,10 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-
-// eslint-disable-next-line react-refresh/only-export-components
-function App() {
-  return (
-    <div style={{ padding: '20px', textAlign: 'center' }}>
-      <h1>React is working!</h1>
-      <p>If you see this, JSX is configured correctly.</p>
-    </div>
-  )
-}
+import App from './App'
+// import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <App />
-  </React.StrictMode>
+  </React.StrictMode>,
 )
