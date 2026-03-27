@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
      "start": "npm start --loglevel=error",
-    "dev": "NODE_ENV=development nodemon server.js",
+    "dev": "nodemon server.js",
+    "dev:win": "set NODE_ENV=development && nodemon server.js",
 
     "test": "jest",
     "test:watch": "jest --watch",
