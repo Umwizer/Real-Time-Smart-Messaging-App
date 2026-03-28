@@ -7,7 +7,9 @@ import {
   updateProfile 
 } from "../controllers/auth.controller.js";
 import { protect } from "../middleware/auth.middleware.js";
-
+import passport from "passport";
+import User from "../models/User.js";
+import jwt from 'jsonwebtoken';
 const router = express.Router();
 
 /**
@@ -205,4 +207,69 @@ router.post("/logout", logout);
 router.get("/profile", protect, getProfile);
 router.put("/profile", protect, updateProfile);
 
+// Google OAuth - initiates login
+router.get('/goole',passport.authenticate('google',{
+  scope:['profile','email'],
+  prompt:'select_account'
+}));
+// Google OAuth - callback URL
+router.get('/google/callback',
+  passport.authenticate('google',{
+    failureRedirect:`${process.env.FRONTEND_URL}/login`,
+    session:true
+  }),
+  (req,res)=>{
+    //Generate JWT Token
+    const token = jwt.sign(
+      {id:req.user._id,role:req.user.role},
+      process.env.JWIT_SECRET,
+      {expiresIn:'7d'}
+    );
+    //Redirect to frontend with token 
+    res.redirect(`${process.env.FRONTEND_URL}/auth/callback?token=${token}`);
+  }
+);
+//google token verification (for client-side flow)
+router.post('/google/verify',async(req,res)=>{
+  try{
+    const {token:googleToken} = req.body
+    const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo',{
+      headers:{Authorization:`Bearer ${googleToken}`}
+    });
+    const profile = await response.json();
+    if(!profile || !profile.email){
+      return res.status(400).json({status:'error',message:'Invalid Google token'});
+    }
+    let user = await User.findOne({email:profile.email});
+    if(!user){
+      user = await User.create({
+        username:profile.name.replace(/\s/g,'').toLowerCase()+Math.random().toString(36).slice(-4),
+        email:profile.email,
+        password:Math.random().toString(36).slice(-16),
+        profilePicture:profile.picture || '',
+        isVerified:true
+      });
+    }
+    const token = jwt.sign(
+      {id:user._id,role:user.role},
+      process.env.JWIT_SECRET,
+      {expiresIn:'7d'}
+    );
+    res.json({
+      status:'success',
+      data:{
+        user:{
+          id:user._id,
+          username:user.username,
+          email:user.email,
+          role:user.role,
+          profilePicture:user.profilePicture
+        },token
+      }
+    });
+  }catch(error){
+    console.error('Google verify error:',error);
+    res.status(500).json({status:'error',message:'Google authentication failed'});
+  }
+});
 export default router;
