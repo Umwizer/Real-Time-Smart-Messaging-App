@@ -14,7 +14,10 @@ import chatRoutes from "./routes/chat.routes.js";
 import messageRoutes from "./routes/message.routes.js";
 import swaggerUi from "swagger-ui-express";
 import swaggerSpec from "./swagger.js";
-
+import session from 'express-session';
+import passport from 'passport';
+import {strategy as GoogleStrategy} from 'passport-google-oauth20';
+import User from "./models/User.js";
 dotenv.config();
 
 const app = express();
@@ -50,7 +53,56 @@ app.use(
     }
   })
 );
-
+//session middleware(required for passport)
+app.use(session({
+  secret:process.env.JWT_SECRET,
+  resave:false,
+  saveUnitialized:false,
+  cookie:{
+    secure:process.env.NODE_ENV === 'production',
+    maxAge: 24*60*60*1000
+  }
+}));
+//initialize passport
+app.use(passport.initialize());
+app.use(passport.session());
+//Passport serialization
+passport.serializeUser((user,done)=>{
+  done(null,user.id);
+});
+passport.deserializeUser(async(id,done)=>{
+  try{
+    const user = await User.findById(id);
+    done(null,user);
+  }catch(error){
+    done(error,null);
+  }
+});
+passport.use(new GoogleStrategy({
+  clientId:process.env.GOGGLE_CLIENT_ID,
+  clientSecret:process.env.GOOGLE_CLIENT_SECRET,
+  callbackURL:process.env.GOOGLE_CALLBACK_URL,
+},
+async(accessToken,refreshToken,profile,done)=>{
+  try{
+    let user = await User.findOne({email:profile.emails[0].value});
+    if(!user){
+      user = await User.create({
+        username:profile.displayName.replace(/\s/g,'').toLowerCase()+Math.random().toString(36).slice(-4),
+        email:profile.emails[0].value,
+        password:Math.random().toString(36).slice(-16),
+        profilePicture:profile.photos?.[0]?.value || '',
+        isVerified:true
+      });
+      console.log("New user created via Google:",user.email);
+    }
+    return done(null,user);
+  }catch(error){
+    console.error('Google OAuth error:',error);
+    return done(error,null);
+  }
+}
+));
 // SWAGGER DOCUMENTATION - Add this before your routes
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
