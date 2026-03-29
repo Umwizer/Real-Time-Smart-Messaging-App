@@ -23,21 +23,21 @@ const client = new MongoClient(uri, {
 
 async function testConnection() {
   try {
-    console.log("\n🔄 Attempting to connect to MongoDB Atlas with secureContext...");
+    console.log("\n Attempting to connect to MongoDB Atlas with secureContext...");
     
     await client.connect();
-    console.log("✅ Connected successfully!");
+    console.log("Connected successfully!");
     
     const db = client.db("adaptivechat");
-    console.log("✅ Database 'adaptivechat' accessible");
+    console.log(" Database 'adaptivechat' accessible");
     
     const collections = await db.listCollections().toArray();
-    console.log(`📚 Collections: ${collections.length > 0 ? collections.map(c => c.name).join(', ') : 'none'}`);
+    console.log(`Collections: ${collections.length > 0 ? collections.map(c => c.name).join(', ') : 'none'}`);
     
-    console.log("\n🎉 SUCCESS: MongoDB connection is working!");
+    console.log("\nSUCCESS: MongoDB connection is working!");
     
   } catch (error) {
-    console.error("\n❌ Connection failed:", error.message);
+    console.error("\n Connection failed:", error.message);
     console.error("Error name:", error.name);
     console.error("Error code:", error.code);
   } finally {
