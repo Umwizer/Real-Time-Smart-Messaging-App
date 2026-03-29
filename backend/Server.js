@@ -8,22 +8,24 @@ import helmet from "helmet";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import jwt from "jsonwebtoken";
-import tls from 'tls';
 import authRoutes from "./routes/auth.routes.js";
 import chatRoutes from "./routes/chat.routes.js";
 import messageRoutes from "./routes/message.routes.js";
 import swaggerUi from "swagger-ui-express";
 import swaggerSpec from "./swagger.js";
-import session from 'express-session';
-import passport from 'passport';
-import {strategy as GoogleStrategy} from 'passport-google-oauth20';
+import session from "express-session";
+import passport from "passport";
+import pkg from "passport-google-oauth20";
 import User from "./models/User.js";
+
+const { Strategy: GoogleStrategy } = pkg;
+
 dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
 
-// Socket.IO setup with authentication
+// Socket.io
 const io = new Server(server, {
   cors: {
     origin: process.env.CORS_ORIGIN || "http://localhost:3000",
@@ -33,7 +35,7 @@ const io = new Server(server, {
 });
 app.set("io", io);
 
-// MIDDLEWARE
+//Core Middleware
 app.use(express.json());
 app.use(
   cors({
@@ -49,69 +51,83 @@ app.use(
     max: 100,
     message: {
       status: "error",
-      message: "Too many requests, please try again later."
-    }
+      message: "Too many requests, please try again later.",
+    },
   })
 );
-//session middleware(required for passport)
-app.use(session({
-  secret:process.env.JWT_SECRET,
-  resave:false,
-  saveUnitialized:false,
-  cookie:{
-    secure:process.env.NODE_ENV === 'production',
-    maxAge: 24*60*60*1000
-  }
-}));
-//initialize passport
+//Session Middleware
+app.use(
+  session({
+    secret: process.env.JWT_SECRET,
+    resave: false,
+    saveUninitialized: false, 
+    cookie: {
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 24 * 60 * 60 * 1000,
+    },
+  })
+);
+//passport initialization
 app.use(passport.initialize());
 app.use(passport.session());
-//Passport serialization
-passport.serializeUser((user,done)=>{
-  done(null,user.id);
+
+//Passport Serialization 
+passport.serializeUser((user, done) => {
+  done(null, user.id);
 });
-passport.deserializeUser(async(id,done)=>{
-  try{
+
+passport.deserializeUser(async (id, done) => {
+  try {
     const user = await User.findById(id);
-    done(null,user);
-  }catch(error){
-    done(error,null);
+    done(null, user);
+  } catch (error) {
+    done(error, null);
   }
 });
-passport.use(new GoogleStrategy({
-  clientId:process.env.GOGGLE_CLIENT_ID,
-  clientSecret:process.env.GOOGLE_CLIENT_SECRET,
-  callbackURL:process.env.GOOGLE_CALLBACK_URL,
-},
-async(accessToken,refreshToken,profile,done)=>{
-  try{
-    let user = await User.findOne({email:profile.emails[0].value});
-    if(!user){
-      user = await User.create({
-        username:profile.displayName.replace(/\s/g,'').toLowerCase()+Math.random().toString(36).slice(-4),
-        email:profile.emails[0].value,
-        password:Math.random().toString(36).slice(-16),
-        profilePicture:profile.photos?.[0]?.value || '',
-        isVerified:true
-      });
-      console.log("New user created via Google:",user.email);
+
+//Google OAuth Strategy
+passport.use(
+  new GoogleStrategy(
+    {
+      clientID: process.env.GOOGLE_CLIENT_ID,       
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      callbackURL: process.env.GOOGLE_CALLBACK_URL,
+    },
+    async (accessToken, refreshToken, profile, done) => {
+      try {
+        let user = await User.findOne({ email: profile.emails[0].value });
+
+        if (!user) {
+          user = await User.create({
+            username:
+              profile.displayName.replace(/\s/g, "").toLowerCase() +
+              Math.random().toString(36).slice(-4),
+            email: profile.emails[0].value,
+            password: Math.random().toString(36).slice(-16),
+            profilePicture: profile.photos?.[0]?.value || "",
+            isVerified: true,
+          });
+          console.log("New user created via Google:", user.email);
+        }
+
+        return done(null, user);
+      } catch (error) {
+        console.error("Google OAuth error:", error);
+        return done(error, null);
+      }
     }
-    return done(null,user);
-  }catch(error){
-    console.error('Google OAuth error:',error);
-    return done(error,null);
-  }
-}
-));
-// SWAGGER DOCUMENTATION - Add this before your routes
+  )
+);
+
+//Swagger Docs
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-// ROUTES
+//Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/chats", chatRoutes);
 app.use("/api/messages", messageRoutes);
 
-// BASIC ROUTES
+//Basic Routes
 app.get("/", (req, res) => {
   res.json({
     status: "success",
@@ -122,8 +138,8 @@ app.get("/", (req, res) => {
       chats: "/api/chats",
       messages: "/api/messages",
       health: "/health",
-      docs: "/api-docs"  // Added Swagger docs link
-    }
+      docs: "/api-docs",
+    },
   });
 });
 
@@ -133,18 +149,18 @@ app.get("/health", (req, res) => {
     message: "Server is running",
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    database: mongoose.connection.readyState === 1 ? "connected" : "disconnected"
+    database:
+      mongoose.connection.readyState === 1 ? "connected" : "disconnected",
   });
 });
 
-// SOCKET.IO HANDLERS
+//Socket.IO Auth Middleware
 io.use(async (socket, next) => {
   try {
     const token = socket.handshake.auth.token;
     if (!token) {
       return next(new Error("Authentication required"));
     }
-    
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     socket.userId = decoded.id;
     next();
@@ -153,54 +169,46 @@ io.use(async (socket, next) => {
   }
 });
 
+//Socket.IO Event Handlers 
 io.on("connection", (socket) => {
   console.log(`New client connected: ${socket.id} (User: ${socket.userId})`);
 
-  // Join user's personal room
   socket.join(`user_${socket.userId}`);
-  
-  // Join chat rooms
+
   socket.on("join_chat", (chatId) => {
     socket.join(`chat_${chatId}`);
     console.log(`User ${socket.userId} joined chat ${chatId}`);
-    
     socket.to(`chat_${chatId}`).emit("user_joined", {
       userId: socket.userId,
       chatId,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   });
 
-  // Leave chat room
   socket.on("leave_chat", (chatId) => {
     socket.leave(`chat_${chatId}`);
     console.log(`User ${socket.userId} left chat ${chatId}`);
-    
     socket.to(`chat_${chatId}`).emit("user_left", {
       userId: socket.userId,
       chatId,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   });
 
-  // Send message (real-time)
   socket.on("send_message", (data) => {
     const { chatId, message } = data;
-    
     socket.to(`chat_${chatId}`).emit("new_message", {
       ...message,
-      deliveredAt: new Date().toISOString()
+      deliveredAt: new Date().toISOString(),
     });
-    
     console.log(`Message sent in chat ${chatId} by ${socket.userId}`);
   });
 
-  // Typing indicators
   socket.on("typing_start", ({ chatId }) => {
     socket.to(`chat_${chatId}`).emit("user_typing", {
       userId: socket.userId,
       chatId,
-      isTyping: true
+      isTyping: true,
     });
   });
 
@@ -208,36 +216,31 @@ io.on("connection", (socket) => {
     socket.to(`chat_${chatId}`).emit("user_typing", {
       userId: socket.userId,
       chatId,
-      isTyping: false
+      isTyping: false,
     });
   });
 
-  // Message status updates
   socket.on("message_read", ({ chatId, messageIds }) => {
     socket.to(`chat_${chatId}`).emit("messages_read", {
       messageIds,
       readBy: socket.userId,
-      readAt: new Date().toISOString()
+      readAt: new Date().toISOString(),
     });
   });
 
-  // Handle disconnection
   socket.on("disconnect", () => {
     console.log(`Client disconnected: ${socket.id} (User: ${socket.userId})`);
-    
     socket.broadcast.emit("user_offline", {
       userId: socket.userId,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   });
 
-  // Handle errors
   socket.on("error", (error) => {
     console.error(`Socket error for user ${socket.userId}:`, error);
   });
 });
-
-// DATABASE CONNECTION
+//db connection
 mongoose
   .connect(process.env.MONGODB_URI, {
     serverSelectionTimeoutMS: 5000,
@@ -247,20 +250,19 @@ mongoose
     tlsAllowInvalidHostnames: true,
   })
   .then(() => {
-    console.log(" MongoDB connected successfully");
+    console.log("MongoDB connected successfully");
 
     const PORT = process.env.PORT || 5000;
     server.listen(PORT, () => {
-      console.log(`\n  Server running on port ${PORT}`);
-      console.log(` HTTP: http://localhost:${PORT}`);
-      console.log(` WebSocket: ws://localhost:${PORT}`);
-      console.log(`Swagger Docs: http://localhost:${PORT}/api-docs`);
-      console.log(`\n Available Endpoints:`);
-      console.log(`  Auth:     /api/auth/*`);
-      console.log(` Chats:    /api/chats/*`);
-      console.log(` Messages: /api/messages/*`);
-      console.log(` Health:   /health`);
-      console.log(` Docs:     /api-docs`);
+      console.log(`\n🚀 Server running on port ${PORT}`);
+      console.log(`🌐 HTTP:    http://localhost:${PORT}`);
+      console.log(`📡 WS:      ws://localhost:${PORT}`);
+      console.log(`📖 Docs:    http://localhost:${PORT}/api-docs`);
+      console.log(`\n📌 Endpoints:`);
+      console.log(`   Auth:     /api/auth/*`);
+      console.log(`   Chats:    /api/chats/*`);
+      console.log(`   Messages: /api/messages/*`);
+      console.log(`   Health:   /health`);
     });
   })
   .catch((err) => {
@@ -273,30 +275,29 @@ mongoose
     process.exit(1);
   });
 
-// GRACEFUL SHUTDOWN
+
 process.on("SIGINT", async () => {
-  console.log("\n👋 Received SIGINT. Shutting down gracefully...");
-  io.close(() => console.log("📡 Socket.IO closed"));
+  console.log("\nReceived SIGINT. Shutting down gracefully...");
+  io.close(() => console.log(" Socket.IO closed"));
   await mongoose.connection.close();
   console.log(" MongoDB connection closed");
   process.exit(0);
 });
 
 process.on("SIGTERM", async () => {
-  console.log("\n Received SIGTERM. Shutting down gracefully...");
+  console.log("\nReceived SIGTERM. Shutting down gracefully...");
   io.close();
   await mongoose.connection.close();
   process.exit(0);
 });
 
-// STARTUP LOGS
 console.log("\n" + "=".repeat(60));
-console.log("AdaptiveChat Backend");
+console.log("  AdaptiveChat Backend");
 console.log("=".repeat(60));
-console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
-console.log(`CORS Origin: ${process.env.CORS_ORIGIN || "http://localhost:3000"}`);
-console.log(`JWT Secret: ${process.env.JWT_SECRET ? "Set" : " Not set"}`);
-console.log(`MongoDB URI: ${process.env.MONGODB_URI ? "Configured" : "Not configured"}`);
+console.log(`  Environment : ${process.env.NODE_ENV || "development"}`);
+console.log(`  CORS Origin : ${process.env.CORS_ORIGIN || "http://localhost:3000"}`);
+console.log(`  JWT Secret  : ${process.env.JWT_SECRET ? "Set" : " Not set"}`);
+console.log(`  MongoDB URI : ${process.env.MONGODB_URI ? "Configured" : "Not configured"}`);
 console.log("=".repeat(60) + "\n");
 
 export { app, server, io };
